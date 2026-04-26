@@ -1,8 +1,4 @@
-#include <iostream>
-#include <vector>
-#include <rtl-sdr.h>
-#include <fstream> // Для работы с файлами
-#include "sdr-rtl/RTL_SDR.h"
+#include "sdr-rtl/header/RTL_SDR.h"
 
 
 int main() {
@@ -14,7 +10,7 @@ int main() {
     device.readSignal();
     device.stopRecording();
 
-    
+
     return 0;
 }
 

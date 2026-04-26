@@ -12,8 +12,8 @@ include_directories(${RTLSDR_INCLUDE_DIRS})
 link_directories(${RTLSDR_LIBRARY_DIRS})
 
 add_executable(SDRtest main.cpp
-        sdr-rtl/connectionSDR.cpp
-        sdr-rtl/RTL_SDR.h
-        sdr-rtl/setParameters.cpp
-        sdr-rtl/readSignal.cpp)
+        sdr-rtl/src/connectionSDR.cpp
+        sdr-rtl/header/RTL_SDR.h
+        sdr-rtl/src/setParameters.cpp
+        sdr-rtl/src/readSignal.cpp)
 target_link_libraries(SDRtest ${RTLSDR_LIBRARIES})

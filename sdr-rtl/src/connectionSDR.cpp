@@ -1,4 +1,4 @@
-#include "../sdr-rtl//RTL_SDR.h"
+#include "../header/RTL_SDR.h"
 
 int RTL_SDR::connectionSDR() {
 

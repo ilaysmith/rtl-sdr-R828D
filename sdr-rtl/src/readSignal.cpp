@@ -1,4 +1,4 @@
-#include "../sdr-rtl/RTL_SDR.h"
+#include "../header/RTL_SDR.h"
 
 int RTL_SDR::readSignal() {
 
@@ -8,7 +8,7 @@ int RTL_SDR::readSignal() {
     std::cout << "Чтение 16384 байт данных..." << std::endl;
 
     // Запись данных в файл
-    std::ofstream outfile("../../iq_recording.bin", std::ios::binary);
+    std::ofstream outfile("../iq_recording.bin", std::ios::binary);
     if (!outfile) {
         std::cerr << "Ошибка создания файла!" << std::endl;
         rtlsdr_close(dev);
