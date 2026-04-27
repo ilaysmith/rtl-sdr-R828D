@@ -1,14 +1,37 @@
 #include "sdr-rtl/header/RTL_SDR.h"
+#include "stream/header/stream.h"
 
 
 int main() {
 
-    RTL_SDR device;
+    // 1. Блок многопоточности
+    BackgroundWorker worker;
+    std::string command;
 
-    device.connectionSDR();
-    device.setParameters();
-    device.readSignal();
-    device.stopRecording();
+    while (true) {
+        std::cout << "> ";
+        std::getline(std::cin, command); // Читает команду
+
+        if (command == "init") worker.init();
+        else if (command == "set") worker.set();
+        else if (command == "start") worker.start();
+        else if (command == "stop") worker.stop();
+            //else if (command == "status") worker.status();
+        else if (command == "exit") {
+            worker.stop();  // Останавливаем поток перед выходом
+            worker.exit();
+            break;
+        }
+    }
+
+
+    // 2. Блок rtl-sdr
+    // RTL_SDR device;
+
+    //device.connectionSDR();
+    // device.setParameters();
+    // device.readSignal();
+    // device.stopRecording();
 
 
     return 0;

@@ -21,7 +21,7 @@ public:
 
     void setParameters();
 
-    int readSignal();
+    int readSignal(std::ofstream &outfile);
 
     void stopRecording() {
         rtlsdr_close(dev);
