@@ -1,11 +1,11 @@
-#include "sdr-rtl/header/RTL_SDR.h"
-#include "stream/header/stream.h"
+#include "rtl-sdr-wrapper/include/rtl-sdr-wrapper.h"
+#include "stream/include/Worker.h"
 
 
 int main() {
 
-    // 1. Блок многопоточности
-    BackgroundWorker worker;
+    // 1. Блок потоков
+    Worker worker;
     std::string command;
 
     while (true) {

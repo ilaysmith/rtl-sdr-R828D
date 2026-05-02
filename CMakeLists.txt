@@ -12,15 +12,10 @@ include_directories(${RTLSDR_INCLUDE_DIRS})
 link_directories(${RTLSDR_LIBRARY_DIRS})
 
 add_executable(SDRtest main.cpp
-        sdr-rtl/src/connectionSDR.cpp
-        sdr-rtl/header/RTL_SDR.h
-        sdr-rtl/src/setParameters.cpp
-        sdr-rtl/src/readSignal.cpp
-        stream/header/stream.h
-        stream/src/start.cpp
-        stream/src/work.cpp
-        stream/src/stop.cpp
-        stream/src/init.cpp
-        stream/src/set.cpp
-        stream/src/exit.cpp)
+        stream/include/Worker.h
+        stream/source/Worker.cpp
+        Recorder/include/Recorder.h
+        Recorder/source/Recorder.cpp
+        rtl-sdr-wrapper/source/rtl-sdr-wrapper.cpp
+        rtl-sdr-wrapper/include/rtl-sdr-wrapper.h)
 target_link_libraries(SDRtest ${RTLSDR_LIBRARIES})
