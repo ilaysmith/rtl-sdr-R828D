@@ -10,6 +10,9 @@ void Worker::exit() {
 
     device.stopRecording();
     std::cout << "[WORKER] Устройство отключено. \n";
+    recorder.close();
+    std::cout << "[RECORDER] Запись остановлена. \n";
+    std::cout << "[DB] Сервер отключен. \n";
 }
 
 // 2. Метод инициализации  __________________________  как будто уже не участвует
@@ -21,7 +24,7 @@ void Worker::init() {
     device.connectionSDR(); // инициализируем rtl-sdr
     std::cout << "Успешно инициализирован [DEVICE]" << std::endl;
 
-    // Recorder. А надо ли, если у меня в start привязка к инициализации __________________________
+    // Recorder
     // Инициализируем рекордер только при первом запуске
     static bool recorder_initialized = false;
     if (!recorder_initialized) {
@@ -29,24 +32,17 @@ void Worker::init() {
         recorder_initialized = true;
         std::cout << "Успешно инициализирован [RECORDER]" << std::endl;
     }
-    running = true;
-    std::cout << "Пока что не инициализирован [DB]" << std::endl << std::endl;
 
     // DB
+
+    running = true;
 
     //std::cout << "[WORKER] инициализирован.\n";
 }
 
 // 3. Метод установки несущей и ЧД. Пока что захардкожен _____________ в теории можно добавить, чтобы можно было менять ЧД и ЦД
 void Worker::set() {
-
-    // Сначала инициализируем устройство
-    if (!device.dev) {                    // если устройство ещё не открыто
-        device.connectionSDR();           // открываем
-    }
-
     device.setParameters();
-
 }
 
 // 4. Метод запуска
@@ -64,30 +60,14 @@ void Worker::start() {
     std::cout << "[WORKER] Запущен.\n" << std::endl;
 }
 
-// 5. Метод остановки записи сигнала
-void Worker::stop() {
-    {
-        running = false; // не требует mutex. для остановки work()
-        //std::lock_guard<std::mutex> lock(mtx);
-        //if (!running) return;
-
-        if (worker.joinable()) worker.join(); // Проверяем, что поток существует и ждём реального завершения
-
-        //running = false; // Просто ставим флаг, который будет видно в start()
-        recorder.close();
-        std::cout << "[WORKER] Остановлен. \n";
-    }
-}
-
-// Управление потоками
-// joinable() — проверяет, возможно ли присоединение связанного потока.
-// join() — блокируется до завершения соответствующего потока.
-
-// 6. Метод записи сигнала
+// 5. Метод записи сигнала
 void Worker::work() {
 
     std::cout << "[WORKER] Начало асинхронной записи..." << std::endl;
 
+    // DB
+
+    // Device
     device.startRecordingAsync(recorder);
 
     // Ждём сигнал остановки
@@ -97,11 +77,27 @@ void Worker::work() {
 
     // Останавливаем
     device.stopRecordingAsync();
-    //device.stopRecording();
-    //recorder.close();
 
     std::cout << "[WORKER] Запись остановлена." << std::endl;
     std::cout << "[WORKER] Всего блоков: " << recorder.totalBlocksWritten() << std::endl;
     std::cout << "[WORKER] Последний файл: " << recorder.currentFilename() << std::endl;
 }
 
+// 6. Метод остановки записи сигнала
+void Worker::stop() {
+    {
+        running = false; // для остановки work()
+        //std::lock_guard<std::mutex> lock(mtx);
+
+        if (worker.joinable()) worker.join(); // Проверяем, что поток существует и ждём реального завершения
+
+        recorder.close();
+        std::cout << "[WORKER] Остановлен. \n";
+        std::cout << "[RECORDER] Закрыт. \n";
+        //std::cout << "[WORKER] Документов в MongoDB: " << db_wrapper.totalDocuments() << std::endl;
+    }
+}
+
+// Управление потоками
+// joinable() — проверяет, возможно ли присоединение связанного потока.
+// join() — блокируется до завершения соответствующего потока.

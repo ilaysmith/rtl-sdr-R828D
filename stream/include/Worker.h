@@ -9,22 +9,30 @@
 #include <chrono>        // Для sleep_for (задержка)
 #include <string>        // Для std::string
 #include "../../rtl-sdr-wrapper/include/rtl-sdr-wrapper.h"
+#include "../../DB-wrapper/include/DB-wrapper.h"
 
 class Worker {
 public:
-    //mutable std::mutex mtx; // mutex - замок для защиты данных
-    std::thread worker; // объект потока, но не представляет никакой поток
-
-    std::atomic<bool> running;
-
-    uint64_t counter;
-
-    rtlsdr_wrapper device;
-
-    Recorder recorder;
 
     Worker() : running(false), counter(0) {}
 
+    ~Worker() {
+        stop();
+        if (worker.joinable()) worker.join();
+    }
+
+    std::thread worker; // объект потока
+
+    std::atomic<bool> running; // флаг обозначения записи
+
+    rtlsdr_wrapper device; // объект rtl-sdr
+
+    Recorder recorder; // объект записи данных в файл
+
+
+    uint64_t counter; // обычный счётчик
+
+    // Методы управления чтением данных с rtl-sdr
     void start();
 
     void init();
@@ -37,10 +45,7 @@ public:
 
     void exit();
 
-    ~Worker() {
-        stop();
-        if (worker.joinable()) worker.join();
-    }
+    //mutable std::mutex mtx; // mutex - замок для защиты данных
 };
 
 #endif //SDRTEST_WORKER_H

@@ -8,19 +8,29 @@
 #include <atomic>
 #include <thread> // Для работы с потоками
 #include "../../Recorder/include/Recorder.h"
+#include "../../DB-wrapper/include/DB-wrapper.h"
 
 class rtlsdr_wrapper {
 public:
-    uint32_t device_index = 0; //  индекс для обращения к устройству
-    rtlsdr_dev_t *dev = nullptr; // указатель на непрозрачную структуру.
 
+    rtlsdr_wrapper();
+
+    void stopRecording() {
+        rtlsdr_close(dev);
+    };
+
+    // Поля для инициализации rtl-sdr
+    uint32_t device_index = 0; //  индекс для обращения к устройству
+    rtlsdr_dev_t *dev = nullptr; // указатель на непрозрачную структуру
+
+    // Частоты. Центральная и ЧД
     int center_freq = 88400000; // FM-станции вещают в диапазоне 87.5-108 МГц.
     int sample_rate = 2048000; // RTL-SDR аппаратно поддерживает несколько фиксированных значений. Библиотека автоматически округляет до ближайшего
 
     // Асинхронное чтение с rtl sdr
-    std::thread async_thread;
-    std::atomic<bool> is_streaming{false};
-    std::atomic<uint64_t> counter_rtl;
+    std::thread async_thread; // отдельный поток для асинхронного чтения. Пока оно работает, остальные потоки ждут
+    std::atomic<bool> is_streaming{false}; // флаг для учёта работает ли сейчас асинхронное чтение
+    std::atomic<uint64_t> counter_rtl{0};
 
     void startRecordingAsync(Recorder &recorder);
 
@@ -34,19 +44,14 @@ public:
     // Но со static нет доступа к this->dev и другим полям объекта
     // Всё, что нужно колбэку, передаём через void *ctx, так как this-> недоступен
 
-    //
 
-    rtlsdr_wrapper() {}
-
+    // Методы работы с rt;-sdr
     int connectionSDR();
 
     void setParameters();
 
+    // Синхронное чтение. Не актуально в данный момент
     int readSignal(std::ofstream &outfile);
-
-    void stopRecording() {
-        rtlsdr_close(dev);
-    };
 };
 
 
