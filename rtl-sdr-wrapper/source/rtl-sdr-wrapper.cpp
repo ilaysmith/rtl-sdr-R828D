@@ -52,6 +52,7 @@ struct CallbackContex {
     std::atomic<bool> *is_streaming; // указатель на флаг, по которому callback понимает, продолжать ли запись
     std::atomic<uint64_t> *counter_rtl; // Для подсчёта блоков, чтобы увеличивать его внутри callback
     DB_wrapper *db_wrapper;
+    std::string current_filename; // для имени файлов в БД
 };
 
 
@@ -69,13 +70,15 @@ void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx) {
         // write — побайтовая запись в файл (бинарный режим).
         // reinterpret_cast<const char*>(buf) — преобразует unsigned char* в const char*, как требует метод write.
         // len — количество байт для записи.
-        
+
+        std::string filename = contex->recorder->currentFilename(); // Актуальное имя
         std::vector<uint8_t> data(buf, buf + len);
 
         // Запись в MongoDB
-        contex->db_wrapper->saveIQData(data, 88400000, 2048000);
+        //contex->db_wrapper->saveIQData(data, 88400000, 2048000, filename);
+        contex->db_wrapper->addBlock(data, 88400000, 2048000, filename);
+        // flush() вызовется автоматически при накоплении 100 блоков
 
-        //db.saveIQData(data, 88400000, 2048000);
 
         // Увеличиваем счётчик
         if (contex->counter_rtl) {      // Проверяем, что указатель на счетчик не nullptr
@@ -98,7 +101,8 @@ void rtlsdr_wrapper::startRecordingAsync(Recorder &recorder, DB_wrapper &db_wrap
             &recorder,
             &is_streaming,
             &counter_rtl,
-            &db_wrapper
+            &db_wrapper,
+            recorder.currentFilename()
     };
 
     // Запускаем асинхронное чтение в отдельном потоке
@@ -129,6 +133,11 @@ void rtlsdr_wrapper::stopRecordingAsync() {
     }
 }
 
+rtlsdr_wrapper::rtlsdr_wrapper() {
+    std::cout << "[SDR] Конструктор" << std::endl;
+
+}
+
 
 //                          ПОКА НЕ АКТУАЛЬНО
 // 5. Метод чтения сигнала с SDR. Синхронное чтение
@@ -152,7 +161,3 @@ int rtlsdr_wrapper::readSignal(std::ofstream &outfile) {
     return 0;
 }
 
-rtlsdr_wrapper::rtlsdr_wrapper() {
-    std::cout << "[SDR] Конструктор" << std::endl;
-
-}

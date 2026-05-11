@@ -28,7 +28,7 @@ void Worker::init() {
     // Инициализируем рекордер только при первом запуске
     static bool recorder_initialized = false;
     if (!recorder_initialized) {
-        recorder.configure(device.center_freq, device.sample_rate, "../records", 100);
+        recorder.configure(device.center_freq, device.sample_rate, "../records", 60);
         recorder_initialized = true;
         std::cout << "Успешно инициализирован [RECORDER]" << std::endl;
     }
@@ -96,6 +96,7 @@ void Worker::stop() {
         if (worker.joinable()) worker.join(); // Проверяем, что поток существует и ждём реального завершения
 
         recorder.close();
+        db_wrapper.saveData();
         std::cout << "[WORKER] Остановлен. \n";
         std::cout << "[RECORDER] Закрыт. \n";
         //std::cout << "[WORKER] Документов в MongoDB: " << db_wrapper.totalDocuments() << std::endl;

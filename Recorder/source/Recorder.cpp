@@ -49,7 +49,7 @@ void Recorder::openNewFile() {
         return;
     }
 
-    blocks_in_current_file_ = 0; // Обновляет количество блоков в файле (max - 100)
+    blocks_in_current_file_ = 0; // Обновляет количество блоков в файле (max - 60)
     std::cout << "[RECORDER] Создан файл: " << current_filename_ << std::endl;
 }
 
