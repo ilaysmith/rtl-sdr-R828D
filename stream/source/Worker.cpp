@@ -34,6 +34,10 @@ void Worker::init() {
     }
 
     // DB
+    //db_wrapper.startSever();
+    //Сервер запускается вручную через консоль
+    // MongoSH
+    //db_wrapper.start_mongosh();
 
     running = true;
 
@@ -68,7 +72,7 @@ void Worker::work() {
     // DB
 
     // Device
-    device.startRecordingAsync(recorder);
+    device.startRecordingAsync(recorder, db_wrapper);
 
     // Ждём сигнал остановки
     while (running) {
@@ -101,3 +105,10 @@ void Worker::stop() {
 // Управление потоками
 // joinable() — проверяет, возможно ли присоединение связанного потока.
 // join() — блокируется до завершения соответствующего потока.
+
+
+// 7. Метод вывода статуса БД
+void Worker::status() {
+    // DB
+    db_wrapper.status_mongosh();
+}

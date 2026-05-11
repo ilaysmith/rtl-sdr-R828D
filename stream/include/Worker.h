@@ -29,6 +29,8 @@ public:
 
     Recorder recorder; // объект записи данных в файл
 
+    DB_wrapper db_wrapper; // обект БД
+
 
     uint64_t counter; // обычный счётчик
 
@@ -44,6 +46,8 @@ public:
     void stop();
 
     void exit();
+
+    void status();
 
     //mutable std::mutex mtx; // mutex - замок для защиты данных
 };

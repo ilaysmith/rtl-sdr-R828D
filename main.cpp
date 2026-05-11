@@ -1,9 +1,9 @@
 #include "rtl-sdr-wrapper/include/rtl-sdr-wrapper.h"
 #include "stream/include/Worker.h"
-
+#include <mongocxx/instance.hpp>
 
 int main() {
-
+    mongocxx::instance inst{};
     // 1. Блок потоков
     Worker worker;
     std::string command;
@@ -16,7 +16,7 @@ int main() {
         else if (command == "set") worker.set();
         else if (command == "start") worker.start();
         else if (command == "stop") worker.stop();
-            //else if (command == "status") worker.status();
+        else if (command == "status") worker.status();
         else if (command == "exit") {
             worker.stop();  // Останавливаем поток перед выходом
             worker.exit();

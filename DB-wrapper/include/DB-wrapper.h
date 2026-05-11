@@ -5,9 +5,10 @@
 #include <vector>
 #include <cstdint>
 
+
 class DB_wrapper {
 public:
-    DB_wrapper() = default;
+    DB_wrapper();
 
     void saveIQData(const std::vector<uint8_t> &data, int center_freq, int sample_rate);
 
@@ -18,6 +19,11 @@ public:
     bool stopServer();
 
     bool isServerRunning();
+
+    // Mongosh
+    bool start_mongosh();
+
+    bool status_mongosh();
 };
 
 

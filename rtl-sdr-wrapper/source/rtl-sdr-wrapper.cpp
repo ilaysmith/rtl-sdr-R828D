@@ -1,4 +1,5 @@
 #include "../include/rtl-sdr-wrapper.h"
+#include "../../DB-wrapper/include/DB-wrapper.h"
 #include <iostream>
 
 
@@ -50,7 +51,7 @@ struct CallbackContex {
     Recorder *recorder;
     std::atomic<bool> *is_streaming; // указатель на флаг, по которому callback понимает, продолжать ли запись
     std::atomic<uint64_t> *counter_rtl; // Для подсчёта блоков, чтобы увеличивать его внутри callback
-    //DB_wrapper *db_wrapper;
+    DB_wrapper *db_wrapper;
 };
 
 
@@ -68,10 +69,12 @@ void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx) {
         // write — побайтовая запись в файл (бинарный режим).
         // reinterpret_cast<const char*>(buf) — преобразует unsigned char* в const char*, как требует метод write.
         // len — количество байт для записи.
-
-        // Запись в MongoDB — создаём временный объект
-        DB_wrapper db;
+        
         std::vector<uint8_t> data(buf, buf + len);
+
+        // Запись в MongoDB
+        contex->db_wrapper->saveIQData(data, 88400000, 2048000);
+
         //db.saveIQData(data, 88400000, 2048000);
 
         // Увеличиваем счётчик
@@ -83,7 +86,7 @@ void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx) {
 }
 
 // 3. Асинхронное чтение
-void rtlsdr_wrapper::startRecordingAsync(Recorder &recorder) {
+void rtlsdr_wrapper::startRecordingAsync(Recorder &recorder, DB_wrapper &db_wrapper) {
     is_streaming = true;
 
     rtlsdr_reset_buffer(dev); // reset буфера
@@ -95,7 +98,7 @@ void rtlsdr_wrapper::startRecordingAsync(Recorder &recorder) {
             &recorder,
             &is_streaming,
             &counter_rtl,
-            //db_wrapper
+            &db_wrapper
     };
 
     // Запускаем асинхронное чтение в отдельном потоке
@@ -151,4 +154,5 @@ int rtlsdr_wrapper::readSignal(std::ofstream &outfile) {
 
 rtlsdr_wrapper::rtlsdr_wrapper() {
     std::cout << "[SDR] Конструктор" << std::endl;
+
 }

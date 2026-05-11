@@ -32,7 +32,8 @@ public:
     std::atomic<bool> is_streaming{false}; // флаг для учёта работает ли сейчас асинхронное чтение
     std::atomic<uint64_t> counter_rtl{0};
 
-    void startRecordingAsync(Recorder &recorder);
+    //void startRecordingAsync(Recorder &recorder);
+    void startRecordingAsync(Recorder &recorder, DB_wrapper &db_wrapper);
 
     void stopRecordingAsync();
 
