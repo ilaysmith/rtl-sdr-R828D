@@ -25,7 +25,7 @@ public:
 
     // Частоты. Центральная и ЧД
     int center_freq = 88400000; // FM-станции вещают в диапазоне 87.5-108 МГц.
-    int sample_rate = 2048000; // RTL-SDR аппаратно поддерживает несколько фиксированных значений. Библиотека автоматически округляет до ближайшего
+    int sample_rate = 240000; // RTL-SDR аппаратно поддерживает несколько фиксированных значений. Библиотека автоматически округляет до ближайшего
 
     // Асинхронное чтение с rtl sdr
     std::thread async_thread; // отдельный поток для асинхронного чтения. Пока оно работает, остальные потоки ждут
@@ -50,6 +50,17 @@ public:
     int connectionSDR();
 
     void setParameters();
+
+    // Контекст для передачи в колбэк
+    struct Context {
+        Recorder *recorder = nullptr;
+        DB_wrapper *db_wrapper = nullptr;
+        std::atomic<bool> *is_streaming = nullptr;
+        std::atomic<uint64_t> *counter = nullptr;
+    } ctx;  // ← поле класса
+
+    void cleanup();  // удаление ctx при exit
+
 
     // Синхронное чтение. Не актуально в данный момент
     int readSignal(std::ofstream &outfile);

@@ -1,185 +1,91 @@
 #include "../include/DB-wrapper.h"
 #include <mongocxx/client.hpp>
-#include <mongocxx/instance.hpp>
 #include <mongocxx/uri.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/types.hpp>
+#include <bsoncxx/json.hpp>
 #include <iostream>
 #include <chrono>
-#include <cstdlib>
 #include <thread>
-
-
-// Пока не используется
-size_t DB_wrapper::totalDocuments() {
-    try {
-        mongocxx::client conn{mongocxx::uri{"mongodb://localhost:27017"}};
-        return conn["sdr_data"]["signals"].count_documents({});
-    } catch (const std::exception &e) {
-        std::cerr << "[DB] Ошибка totalDocuments: " << e.what() << std::endl;
-        return 0;
-    }
-}
-
-// Сервер запускается вручную
-bool DB_wrapper::startSever() {
-    std::cout << "[DB] Запуск сервера..." << std::endl;
-    if (system("sudo systemctl start mongod") != 0) return false;
-    for (int i = 0; i < 10; i++) {
-        if (isServerRunning()) {
-            std::cout << "[DB] Сервер запущен." << std::endl;
-            return true;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-    return false;
-}
-
-// Сервер останавлтвается вручную
-bool DB_wrapper::stopServer() {
-    return system("sudo systemctl stop mongod") == 0;
-}
-
-
-// Пока не используется
-bool DB_wrapper::isServerRunning() {
-    return system("sudo systemctl is-active --quiet mongod") == 0;
-}
 
 // Конструктор для видимости, что объект создаётся
 DB_wrapper::DB_wrapper() {
     std::cout << "[DB] Конструктор" << std::endl;
 }
 
+//////////////////  Save data ////////////////////////
 
-/////////////////        MONGOSH           ////////////////////
-// 1. Запуск монго. По итогу не нужен
-bool DB_wrapper::start_mongosh() {
-    if (system("mongosh") != 0) return false;
-
-    std::cout << "[DB] mongosh подключен" << std::endl;
-    return true;
-}
-
-
-// 2. Вывод состояния БД sdr_data. Все Бд не вывожу, так как для проекта незачем, но можно и сделать
-bool DB_wrapper::status_mongosh() {
-    system("mongosh --quiet --eval \""
-           "var db = db.getSiblingDB('sdr_data');"
-           "db.signals.find({}, {iq_data: 0}).sort({_id: -1}).limit(6).forEach(printjson)"
-           "\"");
-    //system("mongosh");
-    //system("show dbs");
-    //system("use sdr_data");
-    return true;
-}
-
-
-//////////////////  name for data ////////////////////////
-
-// 1.
-void
-DB_wrapper::addBlock(const std::vector<uint8_t> &data, int center_freq, int sample_rate, const std::string &filename) {
-    // Сохраняем параметры первого блока
-    if (buffer_.empty()) {              // если это первый блок, то запоминаем параметры. У остальных они не меняются
-        buffer_center_freq_ = center_freq;
-        buffer_sample_rate_ = sample_rate;
-        buffer_filename_ = filename;
-    }
-
-    buffer_.push_back(data); // копия вектора в буффер
-
-    // Если накопили лимит — сохраняем
-    if (buffer_.size() >= max_blocks_) {
-        saveData();
-    }
-}
-
-// 2.
-void DB_wrapper::saveData() {
-    if (buffer_.empty()) return;// если пусто, сохранять нечего
-
+// 1. Сохранение данных
+void DB_wrapper::saveData(int center_freq, int sample_rate,
+                          const std::string &filename,
+                          int blocks_count, int total_samples) {
     try {
-        mongocxx::client conn{mongocxx::uri{"mongodb://localhost:27017"}};
-        auto coll = conn["sdr_data"]["signals"];
+        mongocxx::client conn{mongocxx::uri{uri_}};
+        auto coll = conn[db_name_][collection_name_];
 
-        // 1. Суммируем размеры
-        size_t total_size = 0;
-        for (size_t i = 0; i < buffer_.size(); i++) {
-            total_size += buffer_[i].size();
-        } // проход по всем блокам и суммируем их размеры. 60 * 262144 байт
-
-        // 2. Суммируем блоки
-        std::vector<uint8_t> merged; // общий массив для всех
-        merged.reserve(total_size); // память под всё
-        for (size_t i = 0; i < buffer_.size(); i++) {
-            merged.insert(merged.end(), buffer_[i].begin(), buffer_[i].end());
-        } // добавляем очередной блок в конец. Всего их 60 штук
-
-        bsoncxx::types::b_binary bin{
-                bsoncxx::binary_sub_type::k_binary,
-                static_cast<uint32_t>(merged.size()),
-                merged.data()
-        };
-
-        // BSON объект из данных.
         auto doc = bsoncxx::builder::stream::document{}
-                << "timestamp" << bsoncxx::types::b_date(std::chrono::system_clock::now())
-                << "center_freq" << buffer_center_freq_
-                << "sample_rate" << buffer_sample_rate_
-                << "blocks_count" << static_cast<int32_t>(buffer_.size()) // 60
-                << "total_samples" << static_cast<int32_t>(total_size / 2) // 7864320 - всего сэмплов
-                << "filename" << buffer_filename_
-                << "iq_data" << bin
-                << bsoncxx::builder::stream::finalize;
-
-        coll.insert_one(doc.view());
-        blocks_saved_ += buffer_.size();
-        std::cout << "[DB] Сохранено " << buffer_.size() << " блоков (" << total_size / 2 << " сэмплов)"
-                  << std::endl;
-
-        buffer_.clear(); // очищаем для следующей пачки
-
-    } catch (const std::exception &e) {
-        std::cerr << "[DB] Ошибка при flush: " << e.what() << std::endl;
-    }
-}
-// try-catch на всякий случай, если код в true упадёт.
-
-
-//////// НЕ АКТУально /////
-// Не актуально. saveData новый вариант
-void DB_wrapper::saveIQData(const std::vector<uint8_t> &data, int center_freq, int sample_rate,
-                            const std::string &filename) {
-    try {
-        mongocxx::client conn{mongocxx::uri{"mongodb://localhost:27017"}};
-        auto coll = conn["sdr_data"]["signals"];
-
-        using bsoncxx::builder::stream::document;
-        using bsoncxx::builder::stream::finalize;
-        using bsoncxx::types::b_binary;
-        using bsoncxx::binary_sub_type;
-
-        bsoncxx::types::b_binary bin{
-                bsoncxx::binary_sub_type::k_binary, // тип: обычные байты
-                static_cast<uint32_t>(data.size()), // размер в байтах
-                data.data()                     // указатель на данные
-        };
-
-        auto doc = document{}
                 << "timestamp" << bsoncxx::types::b_date(std::chrono::system_clock::now())
                 << "center_freq" << center_freq
                 << "sample_rate" << sample_rate
-                << "sample_count" << static_cast<int64_t>(data.size() / 2)
+                << "blocks_count" << blocks_count
+                << "total_samples" << total_samples
                 << "filename" << filename
-                << "iq_data" << bin
-                //<< "filename" << "FM88400000_2048000_*.bin"  // ссылка на файл
-                << finalize;
+                << bsoncxx::builder::stream::finalize;
 
         coll.insert_one(doc.view());
-        std::cout << "[DB] Сохранено: " << data.size() / 2 << " сэмплов на " << center_freq << " Гц" << std::endl;
+        std::cout << "[DB] Метаданные сохранены: " << filename
+                  << " (" << blocks_count << " блоков)" << std::endl;
 
     } catch (const std::exception &e) {
-        std::cerr << "[DB] Ошибка сохранения: " << e.what() << std::endl;
+        std::cerr << "[DB] Ошибка: " << e.what() << std::endl;
     }
+}
+
+// try-catch на всякий случай, если код в true упадёт.
+
+
+// 2. Вывод последних пяти документов
+void DB_wrapper::printLastRecords(int count) {
+    try {
+        mongocxx::client conn{mongocxx::uri{uri_}}; // временное подключение к серверу
+        auto coll = conn[db_name_][collection_name_]; // выбирает конкретный документ и коллекцию
+
+        // Сортировка по убыванию _id (новые сначала), ограничение
+        auto opts = mongocxx::options::find{}; // объект для запросов
+        opts.sort(bsoncxx::builder::stream::document{}  // задаёт сортировку
+                          << "_id" << -1                        // сортировка по "id" по убыванию "-1"
+                          << bsoncxx::builder::stream::finalize);
+        opts.limit(count);                                  // ограничивает количество результатов - 5
+
+        auto cursor = coll.find({}, opts);  // ищет все документы (фильтр пустой) с заданными настройками opts
+        // возвращает курсор - объект, который подгружает документы по одному
+
+        // Вывод результатов
+        int printed = 0;
+        for (auto &doc: cursor) {           // на каждой итерации.    doc - bson документ
+            std::cout << bsoncxx::to_json(doc) << std::endl;        // преобразует bson в читаему json
+            printed++;
+        }
+
+        if (printed == 0) {
+            std::cout << "[DB] Коллекция пуста." << std::endl;
+        }
+
+    } catch (const std::exception &e) {
+        std::cerr << "[DB] Ошибка при чтении: " << e.what() << std::endl;
+    }
+}
+
+// 3.
+void DB_wrapper::addBlock(int center_freq, int sample_rate, const std::string &filename) {
+    // Если файл сменился — сохраняем статистику старого
+    if (!current_filename_.empty() && filename != current_filename_) {
+        saveData(center_freq_, sample_rate_, current_filename_, blocks_count_, blocks_count_ * 262144 / 2);
+        blocks_count_ = 0;
+    }
+    // Запоминаем текущий файл
+    current_filename_ = filename;
+    center_freq_ = center_freq;
+    sample_rate_ = sample_rate;
+    blocks_count_++;
 }

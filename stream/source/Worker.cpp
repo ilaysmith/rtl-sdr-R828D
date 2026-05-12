@@ -15,7 +15,7 @@ void Worker::exit() {
     std::cout << "[DB] Сервер отключен. \n";
 }
 
-// 2. Метод инициализации  __________________________  как будто уже не участвует
+// 2. Метод инициализации
 void Worker::init() {
     //std::lock_guard<std::mutex> lock(mtx); // Вешаем замок
     if (running) return; // уже работает - выходим
@@ -33,18 +33,10 @@ void Worker::init() {
         std::cout << "Успешно инициализирован [RECORDER]" << std::endl;
     }
 
-    // DB
-    //db_wrapper.startSever();
-    //Сервер запускается вручную через консоль
-    // MongoSH
-    //db_wrapper.start_mongosh();
-
     running = true;
-
-    //std::cout << "[WORKER] инициализирован.\n";
 }
 
-// 3. Метод установки несущей и ЧД. Пока что захардкожен _____________ в теории можно добавить, чтобы можно было менять ЧД и ЦД
+// 3. Метод установки несущей и ЧД
 void Worker::set() {
     device.setParameters();
 }
@@ -58,12 +50,47 @@ void Worker::start() {
     // Установка параметров по умолчанию
     set();
 
-    worker = std::thread(&Worker::work, this); // Создаём поток -> вызов work.cpp -> readSignal
+    //worker = std::thread(&Worker::work, this); // Создаём поток -> вызов work.cpp -> readSignal
     // в конструктор передаём указатель на метод класса, this - указатель на текущий объект класса, который вызвал start()
+    device.startRecordingAsync(recorder, db_wrapper);
 
     std::cout << "[WORKER] Запущен.\n" << std::endl;
 }
 
+
+// 6. Метод остановки записи сигнала
+void Worker::stop() {
+    {
+        running = false; // для остановки work()
+        //std::lock_guard<std::mutex> lock(mtx);
+
+        device.stopRecordingAsync();
+        recorder.close();
+
+        // Сохраняем метаданные для последнего файла
+        db_wrapper.saveData(
+                device.center_freq, device.sample_rate,
+                recorder.currentFilename(),
+                recorder.blocks_in_current_file_,
+                recorder.blocks_in_current_file_ * 262144 / 2
+        );
+
+        std::cout << "[WORKER] Остановлен. \n";
+    }
+}
+
+// Управление потоками
+// joinable() — проверяет, возможно ли присоединение связанного потока.
+// join() — блокируется до завершения соответствующего потока.
+
+
+// 7. Метод вывода статуса БД
+void Worker::status() {
+    // DB
+    db_wrapper.printLastRecords();
+}
+
+//////////// НЕ АКТУАЛЬНО //////////
 // 5. Метод записи сигнала
 void Worker::work() {
 
@@ -85,31 +112,4 @@ void Worker::work() {
     std::cout << "[WORKER] Запись остановлена." << std::endl;
     std::cout << "[WORKER] Всего блоков: " << recorder.totalBlocksWritten() << std::endl;
     std::cout << "[WORKER] Последний файл: " << recorder.currentFilename() << std::endl;
-}
-
-// 6. Метод остановки записи сигнала
-void Worker::stop() {
-    {
-        running = false; // для остановки work()
-        //std::lock_guard<std::mutex> lock(mtx);
-
-        if (worker.joinable()) worker.join(); // Проверяем, что поток существует и ждём реального завершения
-
-        recorder.close();
-        db_wrapper.saveData();
-        std::cout << "[WORKER] Остановлен. \n";
-        std::cout << "[RECORDER] Закрыт. \n";
-        //std::cout << "[WORKER] Документов в MongoDB: " << db_wrapper.totalDocuments() << std::endl;
-    }
-}
-
-// Управление потоками
-// joinable() — проверяет, возможно ли присоединение связанного потока.
-// join() — блокируется до завершения соответствующего потока.
-
-
-// 7. Метод вывода статуса БД
-void Worker::status() {
-    // DB
-    db_wrapper.status_mongosh();
 }

@@ -30,37 +30,44 @@ int rtlsdr_wrapper::connectionSDR() {
 
 // 2. Метод установки параметров для SDR (Пока что они заданы жёстко)
 void rtlsdr_wrapper::setParameters() {
-    // Настройка параметров приёма
+    int ret;
 
-    rtlsdr_set_center_freq(dev, center_freq); // настраивает частоту гетеродина тюнера R828D на указанную частоту
-    rtlsdr_set_sample_rate(dev, sample_rate); // Настраивает АЦП RTL2832U на нужную ЧД
-    rtlsdr_set_tuner_gain_mode(dev, 0); // Управляет режимом усиления. 0 = авто, 1 = ручной
-    // 0 - тюнер сам подстраивает усиление в зависимости от уровня сигнала.
-    // 1 - можно задать конкретное усиление через rtlsdr_set_tuner_gain(). Полезно для слабых сигналов
+    // 1. Сначала частота дискретизации
+    ret = rtlsdr_set_sample_rate(dev, sample_rate);
+    if (ret < 0) std::cerr << "[SDR] Ошибка установки ЧД: " << ret << std::endl;
 
-    std::cout << "  Частота: " << rtlsdr_get_center_freq(dev) << " Гц" << std::endl;
-    std::cout << "  ЧД: " << rtlsdr_get_sample_rate(dev) << " Гц" << std::endl << std::endl;
+    // 2. Потом центральная частота
+    ret = rtlsdr_set_center_freq(dev, center_freq);
+    if (ret < 0) std::cerr << "[SDR] Ошибка установки частоты: " << ret << std::endl;
+
+    // 3. Усиление
+    rtlsdr_set_tuner_gain_mode(dev, 0);
+
+    // 4. Ждём стабилизации PLL (R828D нужно больше времени)
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // 5. Проверяем, что настроилось
+    int actual_freq = rtlsdr_get_center_freq(dev);
+    int actual_rate = rtlsdr_get_sample_rate(dev);
+
+    std::cout << "  Частота: " << actual_freq << " Гц (ожидалось " << center_freq << ")" << std::endl;
+    std::cout << "  ЧД: " << actual_rate << " Гц (ожидалось " << sample_rate << ")" << std::endl;
+
+    // 6. Сброс буфера
+    rtlsdr_reset_buffer(dev);
 }
+
 
 /////////////////////////////// БЛОК АСИНХРОННОГО ЧТЕНИЯ //////////////////////////
 // typedef void(*rtlsdr_read_async_cb_t)(unsigned char *buf, uint32_t len, void *ctx);
 // void *ctx - указатель на любые данные, которые нужно передать в callback. Используем структуру, так как таких данных несколько, а указатель один
 
-// 1. Контекст колбэк структуры. Вызывается после записи блока данных с rtl
-struct CallbackContex {
-    Recorder *recorder;
-    std::atomic<bool> *is_streaming; // указатель на флаг, по которому callback понимает, продолжать ли запись
-    std::atomic<uint64_t> *counter_rtl; // Для подсчёта блоков, чтобы увеличивать его внутри callback
-    DB_wrapper *db_wrapper;
-    std::string current_filename; // для имени файлов в БД
-};
-
 
 // 2. Статический callback
-void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx) {
+void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx_ptr) {
     std::cout << "[CALLBACK] Вызов #" << std::endl;
-    // buf — указатель на сырые данные от SDR (I/Q чередующиеся байты), len - их длина
-    auto *contex = static_cast<CallbackContex *>(ctx); // static_cast преобразует void* обратно в CallbackContext*.
+    // buf — указатель на сырые данные от SDR (I/Q чередующиеся байты), len - длина сырых байтов
+    auto *contex = static_cast<Context *>(ctx_ptr); // static_cast преобразует void* обратно в CallbackContext*.
 
     if (contex->is_streaming->load()) { // атомарная проверка флага. load() - атомарное чтение
 
@@ -72,19 +79,16 @@ void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx) {
         // len — количество байт для записи.
 
         std::string filename = contex->recorder->currentFilename(); // Актуальное имя
-        std::vector<uint8_t> data(buf, buf + len);
+        std::vector<uint8_t> data(buf, buf + len); // ?????
 
         // Запись в MongoDB
-        //contex->db_wrapper->saveIQData(data, 88400000, 2048000, filename);
-        contex->db_wrapper->addBlock(data, 88400000, 2048000, filename);
-        // flush() вызовется автоматически при накоплении 100 блоков
+        contex->db_wrapper->addBlock(88400000, 240000, filename);
 
 
         // Увеличиваем счётчик
-        if (contex->counter_rtl) {      // Проверяем, что указатель на счетчик не nullptr
-            contex->counter_rtl->fetch_add(1); // fetch_add(1) — атомарное увеличение на 1 (без прерывания).
-        }
-        std::cout << "Записан блок: " << contex->counter_rtl->load() << std::endl;
+        contex->counter->fetch_add(1); // fetch_add(1) — атомарное увеличение на 1 (без прерывания)
+
+        std::cout << "Записан блок: " << contex->counter->load() << std::endl;
     }
 }
 
@@ -92,30 +96,31 @@ void rtlsdr_wrapper::iq_callback(unsigned char *buf, uint32_t len, void *ctx) {
 void rtlsdr_wrapper::startRecordingAsync(Recorder &recorder, DB_wrapper &db_wrapper) {
     is_streaming = true;
 
-    rtlsdr_reset_buffer(dev); // reset буфера
+    //rtlsdr_reset_buffer(dev); // reset буфера
 
     // Создаём контекст для передачи в callback. Структура контекста в динамической памяти. Она будет жить, пока работает асинхронное чтение
     // Локальная переменная уничтожилась бы при выходе из startRecordingAsync
     // Указатели в структуре указывают на поля объекта
-    auto *ctx = new CallbackContex{
-            &recorder,
-            &is_streaming,
-            &counter_rtl,
-            &db_wrapper,
-            recorder.currentFilename()
-    };
+    // Сохраняем указатели на объекты
+
+    // Заполняем контекст
+    ctx.recorder = &recorder;
+    ctx.db_wrapper = &db_wrapper;
+    ctx.is_streaming = &is_streaming;
+    ctx.counter = &counter_rtl;
 
     // Запускаем асинхронное чтение в отдельном потоке
     // Создаём новый поток с лямбда функцией. Она нужна, потому что std::thread ожидает функцию, которую нужно выполнить в отдельном потоке. Лямбда позволяет создать такую на месте
     //[this, ctx] — захват переменных:
     // this — чтобы вызвать rtlsdr_read_async как метод объекта.
     // ctx — указатель на контекст (копируется по значению, но это указатель, так что указывать будет на ту же память).
-    async_thread = std::thread([this, ctx]() {
+    async_thread = std::thread([this]() {
         // Эта функция блокирует поток до вызова rtlsdr_cancel_async(). Бесконечный цикл
         // iq_callback - статическая функция, передаваемая на каждый блок данных
         // 0, 0 — размеры буфера по умолчанию (15 буферов по 262144 байт каждый).
-        rtlsdr_read_async(dev, iq_callback, ctx, 0, 0);
-        delete ctx; // очищаем контекст после завершения
+        rtlsdr_read_async(dev, iq_callback, &this->ctx, 0, 0);
+        // &this->ctx — адрес этой структуры
+
     });
 
 }
